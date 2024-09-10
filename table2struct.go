@@ -12,7 +12,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
-//map for converting mysql type to golang types
+// map for converting mysql type to golang types
 var typeForMysqlToGo = map[string]string{
 	"int":                "int64",
 	"integer":            "int64",
@@ -53,18 +53,19 @@ var typeForMysqlToGo = map[string]string{
 }
 
 type Table2Struct struct {
-	dsn            string
-	savePath       string
-	db             *sql.DB
-	table          string
-	prefix         string
-	config         *T2tConfig
-	err            error
-	realNameMethod string
-	enableJsonTag  bool   // 是否添加json的tag, 默认不添加
-	packageName    string // 生成struct的包名(默认为空的话, 则取名为: package model)
-	tagKey         string // tag字段的key值,默认是orm
-	dateToTime     bool   // 是否将 date相关字段转换为 time.Time,默认否
+	dsn                string
+	savePath           string
+	db                 *sql.DB
+	table              string
+	prefix             string
+	config             *T2tConfig
+	err                error
+	realNameMethod     string
+	isCamelCaseJsonTag bool   //json tag是否转为驼峰, 默认false
+	enableJsonTag      bool   // 是否添加json的tag, 默认不添加
+	packageName        string // 生成struct的包名(默认为空的话, 则取名为: package model)
+	tagKey             string // tag字段的key值,默认是orm
+	dateToTime         bool   // 是否将 date相关字段转换为 time.Time,默认否
 }
 
 type T2tConfig struct {
@@ -135,6 +136,11 @@ func (t *Table2Struct) Config(c *T2tConfig) *Table2Struct {
 	return t
 }
 
+func (t *Table2Struct) SetJsonTagToCamelCase() *Table2Struct {
+	t.isCamelCaseJsonTag = true
+	return t
+}
+
 func (t *Table2Struct) Run() error {
 	if t.config == nil {
 		t.config = new(T2tConfig)
@@ -173,14 +179,14 @@ func (t *Table2Struct) Run() error {
 		}
 
 		/*
-		switch len(tableName) {
-		case 0:
-		case 1:
-			tableName = strings.ToUpper(tableName[0:1])
-		default:
-			// 字符长度大于1时
-			tableName = strings.ToUpper(tableName[0:1]) + tableName[1:]
-		}
+			switch len(tableName) {
+			case 0:
+			case 1:
+				tableName = strings.ToUpper(tableName[0:1])
+			default:
+				// 字符长度大于1时
+				tableName = strings.ToUpper(tableName[0:1]) + tableName[1:]
+			}
 		*/
 		tableName = t.camelCase(tableName)
 		depth := 1
@@ -331,7 +337,11 @@ func (t *Table2Struct) getColumns(table ...string) (tableColumns map[string][]co
 		}
 		if t.enableJsonTag {
 			//col.Json = fmt.Sprintf("`json:\"%s\" %s:\"%s\"`", col.Json, t.config.TagKey, col.Json)
-			col.Tag = fmt.Sprintf("`%s:\"%s\" json:\"%s\"`", t.tagKey, col.Tag, jsonTag)
+			if t.isCamelCaseJsonTag {
+				col.Tag = fmt.Sprintf("`%s:\"%s\" json:\"%s\"`", t.tagKey, col.Tag, snakeToCamel(jsonTag))
+			} else {
+				col.Tag = fmt.Sprintf("`%s:\"%s\" json:\"%s\"`", t.tagKey, col.Tag, jsonTag)
+			}
 		} else {
 			col.Tag = fmt.Sprintf("`%s:\"%s\"`", t.tagKey, col.Tag)
 		}
@@ -370,4 +380,13 @@ func (t *Table2Struct) camelCase(str string) string {
 }
 func tab(depth int) string {
 	return strings.Repeat("\t", depth)
+}
+
+// 将下划线命名转为驼峰命名
+func snakeToCamel(s string) string {
+	parts := strings.Split(s, "_")
+	for i := 1; i < len(parts); i++ {
+		parts[i] = strings.Title(parts[i])
+	}
+	return strings.Join(parts, "")
 }
